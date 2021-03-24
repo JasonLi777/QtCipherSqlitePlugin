@@ -773,7 +773,8 @@ enum QtSqliteCipher {
     AES_128_CBC,
     AES_256_CBC,
     CHACHA20,
-    SQLCIPHER
+    SQLCIPHER,
+    RC4
 };
 
 static int _cipherNameToValue(const QString &name) {
@@ -786,7 +787,10 @@ static int _cipherNameToValue(const QString &name) {
         return CHACHA20;
     } else if (lowerName == QStringLiteral("sqlcipher")) {
         return SQLCIPHER;
-    } else {
+    } else if (lowerName == QStringLiteral("rc4")) {
+        return RC4;
+    }
+    else {
         return UNKNOWN_CIPHER;
     }
 }
@@ -801,6 +805,8 @@ static QString _cipherValueToName(const QtSqliteCipher &cipher) {
         return QStringLiteral("CHACHA20");
     case SQLCIPHER:
         return QStringLiteral("SQLCIPHER");
+    case RC4:
+        return QStringLiteral("RC4");
     default:
         return QStringLiteral("UNKNOWN");
     }
@@ -845,6 +851,8 @@ bool SQLiteCipherDriver::open(const QString & db, const QString &, const QString
     bool sqlcipherHmacUse = true;
     int sqlcipherHmacPgno = 1;
     int sqlcipherHmacSaltMask = 0x3a;
+    // RC4
+    bool rc4Legacy = false;
 
 #ifdef REGULAR_EXPRESSION_ENABLED
     static const QLatin1String regexpConnectOption = QLatin1String("QSQLITE_ENABLE_REGEXP");
@@ -971,6 +979,14 @@ bool SQLiteCipherDriver::open(const QString & db, const QString &, const QString
             }
         }
 
+        if (option.startsWith(QLatin1String("RC4_LEGACY="))) {
+            bool ok;
+            const int nl = option.mid(11).toInt(&ok);
+            if (ok) {
+                rc4Legacy = nl;
+            }
+        }
+
         if (option == QLatin1String("QSQLITE_OPEN_READONLY")) {
             openReadOnlyOption = true;
         } else if (option == QLatin1String("QSQLITE_OPEN_URI")) {
@@ -1048,6 +1064,10 @@ bool SQLiteCipherDriver::open(const QString & db, const QString &, const QString
                 wxsqlite3_config_cipher(d->access, "sqlcipher", "hmac_pgno", sqlcipherHmacPgno);
                 wxsqlite3_config_cipher(d->access, "sqlcipher", "hmac_salt_mask", sqlcipherHmacSaltMask);
                 break;
+            }
+            case RC4:
+            {
+                wxsqlite3_config_cipher(d->access, "rc4", "legacy", rc4Legacy ? 1 : 0);
             }
             default:
                 // Do nothing
